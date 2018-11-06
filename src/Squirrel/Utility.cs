@@ -292,7 +292,7 @@ namespace Squirrel
             return Disposable.Create(() => File.Delete(thePath));
         }
 
-        public static async Task DeleteDirectory(string directoryPath)
+        public static async Task DeleteDirectory(string directoryPath, bool isRootPath=false)
         {
             Contract.Requires(!String.IsNullOrEmpty(directoryPath));
 
@@ -321,8 +321,15 @@ namespace Squirrel
             }
 
             var fileOperations = files.ForEachAsync(file => {
-                File.SetAttributes(file, FileAttributes.Normal);
-                File.Delete(file);
+                if (isRootPath &&
+                    file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                    file.IndexOf("brave", StringComparison.OrdinalIgnoreCase) > -1) {
+                    // BSC - no-op; don't delete
+                    // We need to keep stub executable in place after uninstall
+                } else {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                    File.Delete(file);
+                }
             });
 
             var directoryOperations =
@@ -330,14 +337,16 @@ namespace Squirrel
 
             await Task.WhenAll(fileOperations, directoryOperations);
 
-            Log().Debug("Now deleting folder: {0}", directoryPath);
-            File.SetAttributes(directoryPath, FileAttributes.Normal);
+            if (!isRootPath) {
+                Log().Debug("Now deleting folder: {0}", directoryPath);
+                File.SetAttributes(directoryPath, FileAttributes.Normal);
 
-            try {
-                Directory.Delete(directoryPath, false);
-            } catch (Exception ex) {
-                var message = String.Format("DeleteDirectory: could not delete - {0}", directoryPath);
-                Log().ErrorException(message, ex);
+                try {
+                    Directory.Delete(directoryPath, false);
+                } catch (Exception ex) {
+                    var message = String.Format("DeleteDirectory: could not delete - {0}", directoryPath);
+                    Log().ErrorException(message, ex);
+                }
             }
         }
 
@@ -512,10 +521,10 @@ namespace Squirrel
             }
         }
 
-        public static async Task DeleteDirectoryOrJustGiveUp(string dir)
+        public static async Task DeleteDirectoryOrJustGiveUp(string dir, bool isRootPath=false)
         {
             try {
-                await Utility.DeleteDirectory(dir);
+                await Utility.DeleteDirectory(dir, isRootPath);
             } catch {
                 var message = String.Format("Uninstall failed to delete dir '{0}'", dir);
             }
